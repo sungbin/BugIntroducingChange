@@ -3,6 +3,7 @@ package edu.handong.csee._2018_2.actual_project2;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -33,10 +34,10 @@ public class Main {
 	public static void main(String[] args) throws IOException, RevisionSyntaxException, GitAPIException {
 		// 0. Project directory path to access
 		String directoryPath = "/Users/imseongbin/Documents/Java/okhttp";
-
-		// 1. Initial setting
 		Git git = Git.open(new File(directoryPath));
 		Repository repository = git.getRepository();
+
+		// 1. Initial setting
 		File resultFile = new File("/Users/imseongbin/Desktop/temp.txt"); // ->for output file
 		String targetRef = "52454c61993e4d4376d429652104ae404503c3ad"; // 2015-1
 		String targetFilePath = "okhttp/src/main/java/com/squareup/okhttp/internal/DiskLruCache.java";
@@ -45,27 +46,17 @@ public class Main {
 
 //		 2. Parsing Reference
 		String reference = "data/okhttp.csv";
-		File file = new File(reference);
-		ArrayList<String> paths = new CSVgetter(reference).getColumn(1);
-		ArrayList<String> commits = new CSVgetter(reference).getColumn(3);
-		HashSet<String> fixCommits = new HashSet<String>();
-		for (int i = 0; i < paths.size(); i++) {
-			String path = paths.get(i);
-			if (path.contains(targetFileName))
-				fixCommits.add(commits.get(i));
-		}
+		HashSet<String> fixCommits = parseReference(reference, targetFileName);
 
+		// start processing
 		StringBuffer sb = new StringBuffer(); // -> for printing result
 		for (String fixCommit : fixCommits) {
 			System.out.println(fixCommit);
 
-			String ref = fixCommit; // Fix Commits //
-			aLine[] lines = null;
-
 			// 3. Diff
-			String[] diffs = DiffProcessor.diff(repository, targetFilePath, ref + "~1", ref);
+			String[] diffs = DiffProcessor.diff(repository, targetFilePath, fixCommit + "~1", fixCommit);
 
-			// 4. Previus line parsing
+			// 4. parsing Previous bug line numbers 
 			String rex = "@@\\s\\-?\\+?(\\d+),(\\d+)\\s\\+\\d+,\\d+\\s@@";
 			Pattern p = Pattern.compile(rex);
 			class LN {
@@ -83,8 +74,7 @@ public class Main {
 			}
 			;
 
-			// 5. get bug line numbers
-			lines = blame(git, repository, targetFilePath, ref + "~1");
+			aLine[] lines = blame(git, repository, targetFilePath, fixCommit + "~1");
 			ArrayList<LN> lineNumbers = new ArrayList<>();
 			for (String diff : diffs) {
 				Matcher m = p.matcher(diff);
@@ -95,7 +85,7 @@ public class Main {
 				}
 			}
 
-			// 6. get bug line contents
+			// 5. get bug line contents
 			HashSet<aLine> bugLines = new HashSet<aLine>();
 			for (LN a : lineNumbers) {
 				for (int i = a.start; i < a.end; i++) {
@@ -103,25 +93,37 @@ public class Main {
 				}
 			}
 
-			// 7. Check bug lines
+			// 6. Check bug lines
 			for (aLine a : result) {
 				if (bugLines.contains(a)) {
 					a.buggy();
 				}
 			}
 		}
-		
-		// 8. Make a result file
+
+		// 7. Make a result file
 		for (aLine a : result) {
 			sb.append(a.count);
 			sb.append(" ");
 			sb.append(a.bug);
 			sb.append(" ");
-			sb.append(a.person);
+			sb.append(a.content);
 			sb.append("\n");
 		}
 		FileUtils.writeStringToFile(resultFile, sb.toString());
+	}
 
+	public static HashSet<String> parseReference(String reference, String targetFileName)
+			throws FileNotFoundException, IOException {
+		ArrayList<String> paths = new CSVgetter(reference).getColumn(1);
+		ArrayList<String> commits = new CSVgetter(reference).getColumn(3);
+		HashSet<String> fixCommits = new HashSet<String>();
+		for (int i = 0; i < paths.size(); i++) {
+			String path = paths.get(i);
+			if (path.contains(targetFileName))
+				fixCommits.add(commits.get(i));
+		}
+		return fixCommits;
 	}
 
 	// 출처:
