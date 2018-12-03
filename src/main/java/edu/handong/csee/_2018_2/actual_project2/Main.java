@@ -31,46 +31,41 @@ import org.eclipse.jgit.treewalk.filter.PathFilter;
 public class Main {
 
 	public static void main(String[] args) throws IOException, RevisionSyntaxException, GitAPIException {
-		// 0. Directory path to access
+		// 0. Project directory path to access
 		String directoryPath = "/Users/imseongbin/Documents/Java/okhttp";
 
 		// 1. Initial setting
 		Git git = Git.open(new File(directoryPath));
 		Repository repository = git.getRepository();
-		File temp = new File("/Users/imseongbin/Desktop/temp.txt");
+		File resultFile = new File("/Users/imseongbin/Desktop/temp.txt"); // ->for output file
+		String targetRef = "52454c61993e4d4376d429652104ae404503c3ad"; // 2015-1
+		String targetFilePath = "okhttp/src/main/java/com/squareup/okhttp/internal/DiskLruCache.java";
+		String targetFileName = "DiskLruCache.java";
+		aLine[] result = blame(git, repository, targetFilePath, targetRef);
 
-//		 4. Parsing Reference
-		String reference = "/Users/imseongbin/Desktop/okhttp.csv";
+//		 2. Parsing Reference
+		String reference = "data/okhttp.csv";
 		File file = new File(reference);
 		ArrayList<String> paths = new CSVgetter(reference).getColumn(1);
 		ArrayList<String> commits = new CSVgetter(reference).getColumn(3);
 		HashSet<String> fixCommits = new HashSet<String>();
 		for (int i = 0; i < paths.size(); i++) {
 			String path = paths.get(i);
-			if (path.contains("DiskLruCache.java"))
+			if (path.contains(targetFileName))
 				fixCommits.add(commits.get(i));
 		}
-		StringBuffer sb = new StringBuffer();
+
+		StringBuffer sb = new StringBuffer(); // -> for printing result
 		for (String fixCommit : fixCommits) {
 			System.out.println(fixCommit);
 
-			// 2. The relative path of the file to be blamed (MovieLens에서 blame 하고 싶은 파일의
-			// 상대주소)
-			String targetFilePath = "okhttp/src/main/java/com/squareup/okhttp/internal/DiskLruCache.java";
 			String ref = fixCommit; // Fix Commits //
-			String targetRef = "52454c61993e4d4376d429652104ae404503c3ad"; // 2015-1
+			aLine[] lines = null;
 
-			// 3. Blame to get fix commits
-			aLine[] lines = blame(git, repository, targetFilePath, ref);
-			
-			for (aLine line : lines)
-				sb.append(line + "\n");
-
-			// to make easily
-//		FileUtils.writeStringToFile(temp, sb.toString());
-
-			// 5. Diff
+			// 3. Diff
 			String[] diffs = DiffProcessor.diff(repository, targetFilePath, ref + "~1", ref);
+
+			// 4. Previus line parsing
 			String rex = "@@\\s\\-?\\+?(\\d+),(\\d+)\\s\\+\\d+,\\d+\\s@@";
 			Pattern p = Pattern.compile(rex);
 			class LN {
@@ -88,42 +83,44 @@ public class Main {
 			}
 			;
 
-			// 6. get targetLines
+			// 5. get bug line numbers
 			lines = blame(git, repository, targetFilePath, ref + "~1");
 			ArrayList<LN> lineNumbers = new ArrayList<>();
 			for (String diff : diffs) {
-//			System.out.println(diff);
 				Matcher m = p.matcher(diff);
 				while (m.find()) {
 					int start = Integer.parseInt(m.group(1)) - 1;// for Line count start from Zero
 					int end = start + Integer.parseInt(m.group(2));
-//				System.out.println(start+", " +end);
 					lineNumbers.add(new LN(start, end));
 				}
 			}
 
-			HashSet<aLine> targetLines = new HashSet<aLine>();
+			// 6. get bug line contents
+			HashSet<aLine> bugLines = new HashSet<aLine>();
 			for (LN a : lineNumbers) {
-//			System.out.println(a);
 				for (int i = a.start; i < a.end; i++) {
-//				System.out.println(lines[i]);
-					targetLines.add(lines[i]);
+					bugLines.add(lines[i]);
 				}
 			}
-			sb = new StringBuffer();
-			aLine[] result = blame(git, repository, targetFilePath, targetRef);
+
+			// 7. Check bug lines
 			for (aLine a : result) {
-				if (targetLines.contains(a)) {
+				if (bugLines.contains(a)) {
 					a.buggy();
-//				System.out.println(a);
 				}
-			}
-			for (aLine line : result) {
-				sb.append(line + "\n");
-			System.out.println(line);
 			}
 		}
-		FileUtils.writeStringToFile(temp, sb.toString());
+		
+		// 8. Make a result file
+		for (aLine a : result) {
+			sb.append(a.count);
+			sb.append(" ");
+			sb.append(a.bug);
+			sb.append(" ");
+			sb.append(a.person);
+			sb.append("\n");
+		}
+		FileUtils.writeStringToFile(resultFile, sb.toString());
 
 	}
 
