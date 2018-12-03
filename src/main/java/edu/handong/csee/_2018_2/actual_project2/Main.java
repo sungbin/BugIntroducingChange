@@ -103,7 +103,7 @@ public class Main {
 
 		// 7. Make a result file
 		for (aLine a : result) {
-			sb.append(a.count);
+			sb.append(a.count+1); //-> for line counting
 			sb.append(" ");
 			sb.append(a.bug);
 			sb.append(" ");
